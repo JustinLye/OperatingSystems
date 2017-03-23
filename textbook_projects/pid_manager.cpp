@@ -14,7 +14,11 @@ tp::pid_manager::pid_manager(int minpid, int maxpid) :
 	_maxpid(maxpid),
 	_map_upperbound(maxpid - minpid + 1),
 	_last_point(0),
-	_pid_map(nullptr) {}
+	_pid_map(nullptr) {
+#if defined(__unix__)
+	pthread_mutex_init(&_map_mux, NULL);
+#endif
+}
 
 tp::pid_manager::~pid_manager() {
 	if(_pid_map != nullptr)
@@ -23,8 +27,20 @@ tp::pid_manager::~pid_manager() {
 
 //finds avaliable pid id if any, returns -1 in no pid id is available
 int tp::pid_manager::_search_map(int start_point) {
+	
+	if (start_point < 0 || start_point >= _map_upperbound) {
+		perror("search start_point was not within acceptable bounds.");
+		return -1;
+	}
 	int currpoint = start_point;
 	//search to the end of the map
+/*
+This is unnessary and will probably cause problems. The _map_mux is locked in the only function that calls _search_map.
+#if defined(__unix__)
+	tp::pthread_locker map_guard(&_map_mux); //lock _pid_map while searching for available id
+#elif defined(_WIN32)
+	std::lock_guard<std::mutex> map_guard(_map_mux); //lock _pid_map while searching for available id
+#endif*/
 	while (currpoint < _map_upperbound) {
 		if (_pid_map[currpoint] == 0)
 			return currpoint;
@@ -44,6 +60,11 @@ int tp::pid_manager::_search_map(int start_point) {
 
 //initializes bitmap
 int tp::pid_manager::alloc_map() {
+#if defined(__unix__)
+	tp::pthread_locker map_guard(&_map_mux); //lock _pid_map while initializing map
+#elif defined(_WIN32)
+	std::lock_guard<std::mutex> map_guard(_map_mux); //lock _pid_map while initializing map
+#endif
 	if(_pid_map != nullptr)
 		delete[] _pid_map;
 	_pid_map = new int[_map_upperbound];
@@ -53,18 +74,20 @@ int tp::pid_manager::alloc_map() {
 }
 
 int tp::pid_manager::alloc_pid() {
-	//possible critcal section start
+#if defined(__unix__)
+	tp::pthread_locker map_guard(&_map_mux); //lock _pid_map while allocating id
+#elif defined(_WIN32)
+	std::lock_guard<std::mutex> map_guard(_map_mux); //lock _pid_map while allocating id
+#endif
 	int rtn_pid = _search_map(_last_point);
 	if (rtn_pid == -1) {
 #if defined(PIDMGR_LOG_ALLOC_PID)
 		std::cout << tp::MSG_PID_UNAVAILABLE << std::endl;
 #endif
-		//possible critcal section end
 		return 1;
 	}
 	_pid_map[rtn_pid] = 1;
 	_last_point = rtn_pid;
-	//possible critcal section end
 #if defined(PIDMGR_LOG_ALLOC_PID)
 	rtn_pid += _minpid;
 	std::cout << tp::MSG_PID_ID << rtn_pid << tp::MSG_PID_ALLOC << std::endl;
@@ -76,7 +99,11 @@ int tp::pid_manager::alloc_pid() {
 
 void tp::pid_manager::release_pid(int pid_num) {
 	pid_num -= _minpid;
-	//possible critcal section start
+#if defined(__unix__)
+	tp::pthread_locker map_guard(&_map_mux); //lock _pid_map while releasing id
+#elif defined(_WIN32)
+	std::lock_guard<std::mutex> map_guard(_map_mux); //lock _pid_map while releasing id
+#endif
 	if (pid_num >= 0 && pid_num < _map_upperbound && _pid_map != nullptr) {
 		_pid_map[pid_num] = 0;
 #if defined(PIDMGR_LOG_RELEASE_PID)

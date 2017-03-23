@@ -11,12 +11,36 @@
 #endif
 #endif
 
+#if defined __unix__ 
+#include<unistd.h>
+#include<pthread.h>
+#elif defined _WIN32
+#include<mutex>
+#endif
+
 namespace tp {
 	enum {
 		MIN_PID = 300,
 		MAX_PID = 5000
 	};
-	
+
+#if defined(__unix__)
+	class pthread_locker {
+	private:
+		pthread_mutex_t *_mux;
+		pthread_locker() {}
+		pthread_locker(const pthread_locker&) {}
+		pthread_locker(pthread_locker&&) {}
+	public:
+		pthread_locker(pthread_mutex_t *mux) : _mux(mux) {
+			pthread_mutex_lock(_mux);
+		}
+		~pthread_locker() {
+			pthread_mutex_unlock(_mux);
+		}
+	};
+#endif
+
 	class pid_manager {
 	private:
 		int _minpid;
@@ -24,6 +48,11 @@ namespace tp {
 		int _map_upperbound;
 		int _last_point;
 		int *_pid_map;
+#if defined __unix__
+		pthread_mutex_t _map_mux;
+#elif defined _WIN32
+		std::mutex _map_mux;
+#endif
 		int _search_map(int start_point);
 	public:
 		pid_manager(int minpid = tp::MIN_PID, int maxpid = tp::MAX_PID);
