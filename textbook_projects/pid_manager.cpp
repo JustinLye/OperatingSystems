@@ -73,7 +73,10 @@ int tp::pid_manager::alloc_map() {
 	return 1;
 }
 
-int tp::pid_manager::alloc_pid() {
+int tp::pid_manager::alloc_pid(bool print_when_unavailable) {
+	if (_pid_map == nullptr) {
+		throw std::exception("pid map must be allocated.");
+}
 #if defined(__unix__)
 	tp::pthread_locker map_guard(&_map_mux); //lock _pid_map while allocating id
 #elif defined(_WIN32)
@@ -82,7 +85,12 @@ int tp::pid_manager::alloc_pid() {
 	int rtn_pid = _search_map(_last_point);
 	if (rtn_pid == -1) {
 #if defined(PIDMGR_LOG_ALLOC_PID)
-		std::cout << tp::MSG_PID_UNAVAILABLE << std::endl;
+		if(print_when_unavailable)
+#if defined(_WIN32)
+			std::cout << "Thread ID " << GetCurrentThreadId() << " is waiting. "  << std::endl;
+#else
+			std::cout << tp::MSG_PID_UNAVAILABLE << std::endl;
+#endif
 #endif
 		return 1;
 	}
@@ -90,7 +98,11 @@ int tp::pid_manager::alloc_pid() {
 	_last_point = rtn_pid;
 #if defined(PIDMGR_LOG_ALLOC_PID)
 	rtn_pid += _minpid;
+#if defined(_WIN32)
+	std::cout << "Thread ID " << GetCurrentThreadId() << " was allocated process id " << rtn_pid << std::endl;
+#else
 	std::cout << tp::MSG_PID_ID << rtn_pid << tp::MSG_PID_ALLOC << std::endl;
+#endif
 	return rtn_pid;
 #else
 	return rtn_pid + _minpid;
@@ -107,7 +119,11 @@ void tp::pid_manager::release_pid(int pid_num) {
 	if (pid_num >= 0 && pid_num < _map_upperbound && _pid_map != nullptr) {
 		_pid_map[pid_num] = 0;
 #if defined(PIDMGR_LOG_RELEASE_PID)
+#if defined(_WIN32)
+		std::cout << "Thread ID " << GetCurrentThreadId() << " has released process id " << pid_num + _minpid << std::endl;
+#else
 		std::cout << tp::MSG_PID_ID << pid_num + _minpid << tp::MSG_PID_RELEASE << std::endl;
+#endif
 #endif
 	} else {
 #if defined(PIDMGR_LOG_RELEASE_PID)

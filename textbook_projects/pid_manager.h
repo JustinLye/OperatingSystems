@@ -16,6 +16,10 @@
 #include<pthread.h>
 #elif defined _WIN32
 #include<mutex>
+#include<stdexcept>
+#if defined(PIDMGR_LOG_RELEASE_PID) || defined(PIDMGR_LOG_ALLOC_PID)
+#include<Windows.h>
+#endif
 #endif
 
 namespace tp {
@@ -58,7 +62,7 @@ namespace tp {
 		pid_manager(int minpid = tp::MIN_PID, int maxpid = tp::MAX_PID);
 		~pid_manager();
 		int alloc_map();
-		int alloc_pid();
+		int alloc_pid(bool print_when_unavailable = false);
 		void release_pid(int pid_num);
 	};
 };
